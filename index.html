@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Tables</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#f6f7f9;color:#1f2937;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#app{max-width:480px;margin:0 auto;padding:14px 14px 40px;min-height:100vh}
+h1{font-size:24px;margin:4px 0 2px}
+h2{font-size:17px;margin:18px 0 8px}
+.muted{color:#6b7280;font-size:14px}
+.top2{display:flex;justify-content:space-between;align-items:flex-start}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.sub{font-size:14px;color:#6b7280;text-align:center;flex:1}
+.clk{font-size:18px;font-weight:600;min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.link{background:none;border:0;color:#2563eb;font-size:16px;padding:8px 0}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin:10px 0}
+.card.alert{border-color:#f59e0b;background:#fffbeb}
+.btn{display:block;width:100%;padding:15px;margin:10px 0;border-radius:12px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-size:17px;font-weight:600}
+.btn.alt{background:#fff;color:#2563eb}
+.btn.grey{background:#fff;color:#374151;border-color:#d1d5db}
+.btn[disabled]{opacity:.45}
+.head{font-size:16px;font-weight:600;margin:8px 0}
+.qbox{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;text-align:center;margin:8px 0 12px}
+.q{font-size:40px;font-weight:700}
+.hint{min-height:22px;color:#6b7280;font-size:16px;margin-top:4px}
+.ans{font-size:40px;font-weight:700;min-height:52px;color:#2563eb;border-bottom:2px solid #d1d5db;margin:6px 24px}
+.fb{min-height:26px;font-size:18px;font-weight:600;margin-top:6px}
+.fb.good{color:#16a34a}.fb.bad{color:#dc2626}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{height:62px;font-size:26px;border-radius:12px;border:1px solid #d1d5db;background:#fff;font-weight:600}
+.pad button.fn{background:#f3f4f6}
+.pad button.ok{background:#2563eb;color:#fff;border-color:#2563eb;font-size:20px}
+.lines div{font-size:22px;padding:5px 0;border-bottom:1px solid #f3f4f6}
+.lines div:last-child{border-bottom:0}
+table.tb{width:100%;border-collapse:collapse;font-size:14px}
+table.tb th,table.tb td{border:1px solid #e5e7eb;padding:5px 6px;text-align:center}
+table.tb th{background:#f3f4f6}
+.good{color:#16a34a}.bad{color:#dc2626}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:9px 14px;border:1px solid #d1d5db;border-radius:20px;background:#fff;font-size:16px}
+.chip.on{background:#2563eb;color:#fff;border-color:#2563eb}
+.bars{display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:6px}
+.bar{flex:1;background:#93c5fd;border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.barl{display:flex;gap:4px;font-size:10px;color:#6b7280}
+.barl div{flex:1;text-align:center}
+input[type=text]{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;margin:4px 0 10px}
+label{font-size:14px;color:#374151}
+.big{font-size:34px;font-weight:700;text-align:center}
+.row{display:flex;justify-content:space-between;gap:8px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ============ CONFIG ============ */
+const CFG = {
+  SHEET_URL: "https://script.google.com/macros/s/AKfycbx_nFHo4CpDOF-slGra-Z9Bak2UR6dkixePd2PcbQ9YbWmh293z3mdRijvvaA3PsGlreQ/exec",          // paste the Apps Script web app URL here (or in Settings inside the app)
+  PASS: 0.9,              // pass mark for the mixed test
+  MIXED_N: 40,            // questions in the mixed test
+  OPT_LENS: [10, 20, 30], // optional test lengths
+  RELEARN_ACC: 0.8,       // relearn alert if accuracy over last 15 answers is below this
+  RELEARN_MIN: 10,        // ... and at least this many answers
+  FAST_MS: 8000,          // "fast" answer for tables up to 12
+  FAST_MS_BIG: 10000,     // "fast" answer for tables above 12
+  MAXFAIL: 3              // failures of the same step in a day before pausing until tomorrow
+};
+const KEY = 'tablesApp.v1';
+
+/* ============ HELPERS ============ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad2 = n => String(n).padStart(2, '0');
+function fmtDate(d){ return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function today(){ return fmtDate(new Date()); }
+function daysBetween(a, b){ return Math.round((new Date(b) - new Date(a)) / 864e5); }
+function rnd(n){ return Math.floor(Math.random() * n); }
+function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function fmtMs(ms){ const s = Math.round(ms / 1000); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }
+function clock(ms){ const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + pad2(s % 60); }
+const pct = x => Math.round(x * 100) + '%';
+
+/* ============ STATE ============ */
+function defState(){
+  const learned = {};
+  for (let t = 2; t <= 12; t++) learned[t] = {p1: true, p2: true, whole: true};
+  return {v: 1, name: '', title: 'Tables', learned, current: 13, facts: {}, tableHist: {}, streakDays: [],
+    days: {}, lastActive: today(), pendingTest: false, flow: null, fails: {date: today(), c: {}},
+    easyNext: false, sessions: [], qA: [], qS: [], sheetUrl: ''};
+}
+function load(){
+  try { const r = localStorage.getItem(KEY); if (r) return Object.assign(defState(), JSON.parse(r)); } catch (e) {}
+  return defState();
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+let S = load();
+let CUR = null;
+const A = {};
+
+function startOfDay(){
+  const t = today();
+  if (S.lastActive !== t){
+    if (daysBetween(S.lastActive, t) >= 2) S.easyNext = true;
+    S.lastActive = t;
+  }
+  if (S.fails.date !== t) S.fails = {date: t, c: {}};
+  save();
+}
+function fails(){ if (S.fails.date !== today()) S.fails = {date: today(), c: {}}; return S.fails.c; }
+
+/* ============ FACTS & SELECTION ============ */
+function fk(t, m){ return t + '|' + m; }
+function getFact(t, m){
+  const k = fk(t, m);
+  if (!S.facts[k]) S.facts[k] = {a: 0, c: 0, w: t <= 12 ? 0.3 : 0.6, last: 0, avg: 0, h: []};
+  return S.facts[k];
+}
+function eligible(tables){
+  const out = [];
+  const ts = tables || Object.keys(S.learned).map(Number);
+  for (const t of ts){
+    const L = S.learned[t]; if (!L) continue;
+    for (let m = 2; m <= 9; m++) if ((m <= 6 && L.p1) || (m >= 7 && L.p2)) out.push({t, m});
+  }
+  return out;
+}
+function newestTables(){
+  return Object.keys(S.learned).map(Number).filter(t => S.learned[t].p1).sort((a, b) => b - a).slice(0, 2);
+}
+function score(f){
+  const days = f.last ? (Date.now() - f.last) / 864e5 : 14;
+  return 0.15 + f.w + Math.min(days, 14) / 14 * 0.3;
+}
+function weighted(pool, wf){
+  let sum = 0; const ws = pool.map(e => { const w = Math.max(0.0001, wf(e)); sum += w; return w; });
+  let r = Math.random() * sum;
+  for (let i = 0; i < pool.length; i++){ r -= ws[i]; if (r <= 0) return pool[i]; }
+  return pool[pool.length - 1];
+}
+function buildSet(n, tables, mode){
+  const el = eligible(tables); if (!el.length) return [];
+  const nw = newestTables();
+  const shares = mode === 'mixed' ? (S.easyNext ? [0.2, 0.1, 0.7] : [0.4, 0.4, 0.2]) : [0, 0.6, 0.4];
+  const all = el.map(e => { const f = getFact(e.t, e.m); return {t: e.t, m: e.m, w: f.w, s: score(f)}; });
+  const sorted = all.slice().sort((a, b) => b.s - a.s);
+  const weak = sorted.slice(0, Math.max(5, Math.ceil(sorted.length * 0.25)));
+  const newest = all.filter(e => nw.includes(e.t));
+  let other = all;
+  if (S.easyNext && mode === 'mixed'){ const easy = all.filter(e => e.w < 0.5); if (easy.length >= 5) other = easy; }
+  const used = {}; let prev = null; const out = [];
+  for (let i = 0; i < n; i++){
+    const r = Math.random(); let pool;
+    if (r < shares[0] && newest.length) pool = newest;
+    else if (r < shares[0] + shares[1]) pool = weak;
+    else pool = other;
+    const pick = weighted(pool, e => e.s / (1 + 3 * (used[fk(e.t, e.m)] || 0)) * (prev === fk(e.t, e.m) ? 0.01 : 1));
+    const k = fk(pick.t, pick.m); used[k] = (used[k] || 0) + 1; prev = k;
+    out.push({t: pick.t, m: pick.m, flip: Math.random() < 0.5});
+  }
+  return out;
+}
+function updFact(t, m, ok, ms){
+  const f = getFact(t, m);
+  f.a++; if (ok) f.c++;
+  f.avg = f.avg ? f.avg * 0.7 + ms * 0.3 : ms;
+  f.h.push(ok ? 1 : 0); if (f.h.length > 5) f.h.shift();
+  const fast = t <= 12 ? CFG.FAST_MS : CFG.FAST_MS_BIG;
+  if (!ok) f.w = Math.min(1, f.w + 0.35);
+  else if (ms <= fast) f.w = Math.max(0.05, f.w * 0.6);
+  else f.w = Math.max(0.05, f.w * 0.85);
+  f.last = Date.now();
+  const th = S.tableHist[t] || (S.tableHist[t] = []);
+  th.push(ok ? 1 : 0); if (th.length > 15) th.shift();
+  const d = S.days[today()] || (S.days[today()] = {a: 0, c: 0, ms: 0});
+  d.a++; if (ok) d.c++; d.ms += ms;
+}
+function logAnswer(type, t, m, flip, given, ok, ms, sid){
+  S.qA.push({id: uid(), ts: new Date().toISOString(), date: today(), sid, type, t, m,
+    dir: flip ? 'flip' : 'normal', q: flip ? m + 'x' + t : t + 'x' + m, given, ok: ok ? 1 : 0, ms});
+}
+function streak(){
+  const set = new Set(S.streakDays); const d = new Date(); let n = 0;
+  if (!set.has(fmtDate(d))) d.setDate(d.getDate() - 1);
+  while (set.has(fmtDate(d))){ n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+function countDay(){ const t = today(); if (!S.streakDays.includes(t)) S.streakDays.push(t); }
+function needRelearn(){
+  const out = [];
+  for (const k of Object.keys(S.learned)){
+    const t = Number(k); const h = S.tableHist[t] || [];
+    if (h.length >= CFG.RELEARN_MIN){
+      const acc = h.reduce((a, b) => a + b, 0) / h.length;
+      if (acc < CFG.RELEARN_ACC) out.push({t, acc});
+    }
+  }
+  return out.sort((a, b) => a.acc - b.acc);
+}
+
+/* ============ VIEW ============ */
+function view(html, keep){
+  if (!keep){ if (CUR && CUR.tm) clearInterval(CUR.tm); CUR = null; }
+  $('app').innerHTML = html;
+  window.scrollTo(0, 0);
+}
+function msgScreen(title, text, label, onclick){
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div>
+    <h1>${esc(title)}</h1><div class="card">${text}</div>
+    <button class="btn" onclick="${onclick}">${esc(label)}</button>`);
+}
+
+/* ============ HOME ============ */
+function nextLearn(){
+  const c = S.current; if (c > 20) return null;
+  const L = S.learned[c] || {};
+  if (!L.p1) return {t: c, part: 'p1', label: `Table ${c}: ×1 to ×6`};
+  if (!L.p2) return {t: c, part: 'p2', label: `Table ${c}: ×7 to ×10`};
+  if (!L.whole) return {t: c, part: 'whole', label: `Table ${c}: whole table`};
+  return null;
+}
+function partLabel(p){ return p === 'p1' ? '×1 to ×6' : p === 'p2' ? '×7 to ×10' : 'whole table'; }
+function home(){
+  startOfDay();
+  const f = S.flow, paused = f && f.pausedOn === today();
+  const st = streak();
+  let h = `<div class="top2"><div><h1>${esc(S.title)}</h1>
+    <div class="muted">${S.name ? 'Hi ' + esc(S.name) + '! ' : ''}Streak: <b>${st}</b> day${st === 1 ? '' : 's'}</div></div>
+    <button class="link" onclick="A.go('settings')">⚙ Settings</button></div>`;
+  if (f && !paused){
+    let what = '';
+    if (f.kind === 'test') what = `Continue your ${f.type === 'mixed' ? 'test' : 'optional test'} (question ${Math.min(f.idx + 1, f.qs.length)} of ${f.qs.length})`;
+    else if (f.kind === 'learn') what = `Continue learning Table ${f.table} (${partLabel(f.part)})`;
+    else if (f.kind === 'choice') what = `Table ${f.table}: choose what to do next`;
+    else if (f.kind === 'revise') what = 'Continue revising your wrong answers';
+    h += `<button class="btn" onclick="A.resume()">${what}</button>`;
+  } else if (paused){
+    h += `<div class="card alert">Learning is paused for today. Come back tomorrow and carry on from where you stopped.</div>`;
+  }
+  if (!f && S.pendingTest) h += `<div class="card alert">You have a test waiting. Take it before you learn something new.</div>
+    <button class="btn" onclick="A.startPending()">Take your test</button>`;
+  if (!f && !S.pendingTest){
+    const nl = nextLearn();
+    if (nl) h += `<button class="btn" onclick="A.learnNext()">Learn: ${nl.label}</button>`;
+    else h += `<div class="card">All tables up to 20 are learned. Keep practising with the optional test.</div>`;
+    if (S.easyNext) h += `<div class="muted">You were away for a few days, so your next test will start gently.</div>`;
+  }
+  if (!f || paused) { /* keep other buttons available when nothing is running */ }
+  const nr = needRelearn();
+  if (nr.length && (!f || paused)){
+    h += `<div class="card alert"><b>Needs another look:</b><br>` + nr.slice(0, 3).map(x =>
+      `Table ${x.t} (${pct(x.acc)} right lately) <button class="link" onclick="A.relearn(${x.t})">Relearn</button>`).join('<br>') + `</div>`;
+  }
+  if (!f && !S.pendingTest){
+    h += `<button class="btn alt" onclick="A.go('optcfg')">Optional test</button>`;
+    h += `<button class="btn alt" onclick="A.go('relearnPick')">Relearn a table</button>`;
+  }
+  h += `<button class="btn grey" onclick="A.go('progress')">My progress</button>`;
+  if (S.qA.length || S.qS.length) h += `<div class="muted" style="text-align:center">${S.sheetUrl || CFG.SHEET_URL ? 'Waiting to sync: ' + S.qA.length : 'Sheet not connected yet'}</div>`;
+  view(h);
+}
+A.go = function(s){ ({home, progress, settings, optcfg, relearnPick})[s](); };
+A.resume = function(){
+  const f = S.flow; if (!f) return home();
+  if (f.pausedOn === today()) return home();
+  if (f.kind === 'test') runTest();
+  else if (f.kind === 'learn') runLearn();
+  else if (f.kind === 'choice') choiceScreen();
+  else if (f.kind === 'revise') runRevise();
+  else home();
+};
+A.learnNext = function(){ const nl = nextLearn(); if (nl) startLearn(nl.t, nl.part, false); };
+A.relearn = function(t){ startLearn(t, 'p1', true); };
+A.startPending = function(){ startPendingTest(); };
+
+/* ============ ASK (one question with number pad) ============ */
+function ask(o){
+  CUR = {o, val: '', t0: Date.now(), answered: false, tm: null, token: Math.random(), firstMs: undefined};
+  drawAsk();
+  if (o.timer) CUR.tm = setInterval(tick, 250);
+}
+function drawAsk(){
+  const o = CUR.o;
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button><div class="sub">${esc(o.sub || '')}</div><div class="clk" id="clk">${o.timer ? '0:00' : ''}</div></div>
+    <div class="head">${esc(o.head || '')}</div>
+    <div class="qbox"><div class="q">${esc(o.qtext)} =</div><div class="hint">${o.hint ? esc(o.hint) : '&nbsp;'}</div>
+    <div class="ans" id="ans">&nbsp;</div><div class="fb" id="fb">&nbsp;</div></div>
+    <div class="pad">${[1,2,3,4,5,6,7,8,9].map(n => `<button onclick="A.key('${n}')">${n}</button>`).join('')}
+    <button class="fn" onclick="A.back()">⌫</button><button onclick="A.key('0')">0</button>
+    <button class="fn ok" id="okb" onclick="A.ok()">OK</button></div>`, true);
+}
+function tick(){ if (CUR && $('clk') && !CUR.answered) $('clk').textContent = clock(Date.now() - CUR.t0); }
+function fb(cls, txt){ const e = $('fb'); if (e){ e.className = 'fb ' + cls; e.textContent = txt; } }
+A.key = function(d){
+  if (!CUR || CUR.answered) return;
+  if (CUR.val.length < 5) CUR.val += d;
+  $('ans').textContent = CUR.val;
+};
+A.back = function(){
+  if (!CUR || CUR.answered) return;
+  CUR.val = CUR.val.slice(0, -1);
+  $('ans').textContent = CUR.val || ' ';
+};
+A.ok = function(){
+  if (!CUR) return;
+  if (CUR.answered) return finishAsk();
+  if (CUR.val === '') return;
+  const o = CUR.o, given = Number(CUR.val), ms = Date.now() - CUR.t0, ok = given === o.expected;
+  if (CUR.firstMs === undefined){ CUR.firstMs = ms; CUR.firstOk = ok; CUR.firstGiven = given; }
+  if (!ok && o.retryOnWrong){
+    fb('bad', 'Not quite. Type ' + o.expected);
+    CUR.val = ''; $('ans').textContent = ' ';
+    return;
+  }
+  CUR.answered = true;
+  if (CUR.tm){ clearInterval(CUR.tm); CUR.tm = null; }
+  fb(ok ? 'good' : 'bad', ok ? '✓ Right!' : `✗ ${o.qtext} = ${o.expected}`);
+  $('okb').textContent = 'Next';
+  if (CUR.firstOk && ok){
+    const tk = CUR.token;
+    setTimeout(() => { if (CUR && CUR.token === tk && CUR.answered) finishAsk(); }, 550);
+  }
+};
+function finishAsk(){
+  const c = CUR; if (!c || !c.answered) return;
+  CUR = null;
+  c.o.done({ok: c.firstOk, given: c.firstGiven, ms: c.firstMs});
+}
+document.addEventListener('keydown', e => {
+  if (!CUR) return;
+  if (e.key >= '0' && e.key <= '9') A.key(e.key);
+  else if (e.key === 'Backspace') A.back();
+  else if (e.key === 'Enter') A.ok();
+});
+
+/* ============ TESTS ============ */
+function startPendingTest(){
+  const qs = buildSet(CFG.MIXED_N, null, 'mixed');
+  if (!qs.length){ S.pendingTest = false; save(); return home(); }
+  S.flow = {kind: 'test', type: 'mixed', qs, idx: 0, res: [], sid: uid(), startedAt: Date.now(), tables: null};
+  save(); runTest();
+}
+function startOptTest(tables, n){
+  const qs = buildSet(n, tables, 'opt');
+  if (!qs.length) return home();
+  S.flow = {kind: 'test', type: 'opt', qs, idx: 0, res: [], sid: uid(), startedAt: Date.now(), tables};
+  save(); runTest();
+}
+function runTest(){
+  const f = S.flow;
+  if (f.idx >= f.qs.length) return finishTest();
+  const q = f.qs[f.idx];
+  ask({head: f.type === 'mixed' ? 'Test' : 'Optional test', sub: `${f.idx + 1} / ${f.qs.length}`,
+    qtext: q.flip ? `${q.m} × ${q.t}` : `${q.t} × ${q.m}`, expected: q.t * q.m, timer: true,
+    done: r => {
+      updFact(q.t, q.m, r.ok, r.ms);
+      logAnswer(f.type, q.t, q.m, q.flip, r.given, r.ok, r.ms, f.sid);
+      f.res.push({t: q.t, m: q.m, flip: q.flip, ok: r.ok, ms: r.ms});
+      f.idx++; save();
+      if (S.qA.length >= 20) sync();
+      runTest();
+    }});
+}
+function finishTest(){
+  const f = S.flow, n = f.res.length, c = f.res.filter(r => r.ok).length;
+  const totalMs = f.res.reduce((a, r) => a + r.ms, 0), p = n ? c / n : 0;
+  const pass = f.type === 'mixed' ? p >= CFG.PASS : null;
+  const prev = S.sessions.filter(s => s.type === f.type).slice(-1)[0];
+  const row = {id: f.sid, ts: new Date().toISOString(), date: today(), type: f.type, table: f.tables ? f.tables.join(',') : 'mixed',
+    n, c, p: Math.round(p * 1000) / 10, ms: totalMs, pass: pass === null ? '' : (pass ? 1 : 0)};
+  S.sessions.push(row); S.qS.push(row);
+  if (S.sessions.length > 200) S.sessions.shift();
+  if (f.type === 'mixed') S.pendingTest = false;
+  if (f.type === 'opt') countDay();
+  S.easyNext = false;
+  const wrongs = f.res.filter(r => !r.ok);
+  const summary = {n, c, p, ms: totalMs, pass, type: f.type, prevP: prev ? prev.p / 100 : null,
+    wrongList: Array.from(new Set(wrongs.map(w => w.t + ' × ' + w.m)))};
+  S.flow = wrongs.length ? {kind: 'revise', list: wrongs.map(w => ({t: w.t, m: w.m, flip: w.flip})), i: 0, summary} : null;
+  save(); sync();
+  if (wrongs.length) runRevise(); else showResult(summary);
+}
+function runRevise(){
+  const f = S.flow;
+  if (f.i >= f.list.length){ const s = f.summary; S.flow = null; save(); return showResult(s); }
+  const q = f.list[f.i];
+  ask({head: 'Revise: type the right answer', sub: `${f.i + 1} / ${f.list.length}`,
+    qtext: q.flip ? `${q.m} × ${q.t}` : `${q.t} × ${q.m}`, hint: 'Right answer: ' + (q.t * q.m), expected: q.t * q.m,
+    timer: false, retryOnWrong: true, done: () => { f.i++; save(); runRevise(); }});
+}
+function showResult(s){
+  let msg = '';
+  if (s.type === 'mixed'){
+    msg = s.pass ? `<div class="good big">Passed!</div><div style="text-align:center">You are above the ${pct(CFG.PASS)} pass mark.</div>`
+      : `<div class="bad big">Not passed yet</div><div style="text-align:center">The pass mark is ${pct(CFG.PASS)}. This is where you stand today.</div>`;
+  }
+  const cmp = s.prevP !== null ? `<div class="muted" style="text-align:center">Last time: ${pct(s.prevP)}</div>` : '';
+  view(`<h1>Your result</h1>
+    <div class="card"><div class="big">${s.c} / ${s.n}</div><div class="big" style="font-size:26px">${pct(s.p)}</div>${msg}${cmp}
+    <div class="muted" style="text-align:center;margin-top:6px">Total time ${fmtMs(s.ms)} · ${s.n ? fmtMs(s.ms / s.n) : '0s'} per question</div></div>
+    ${s.wrongList.length ? `<div class="card"><b>Missed:</b> ${s.wrongList.map(esc).join(', ')}</div>` : ''}
+    <button class="btn" onclick="A.go('home')">Done</button>
+    <button class="btn grey" onclick="A.go('progress')">See my progress</button>`);
+}
+
+/* optional test setup */
+let OPT = {tables: new Set(), n: 20};
+function optcfg(){
+  const ts = Object.keys(S.learned).map(Number).filter(t => S.learned[t].p1).sort((a, b) => a - b);
+  if (!OPT.tables.size) ts.slice(-3).forEach(t => OPT.tables.add(t));
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div><h1>Optional test</h1>
+    <h2>Choose tables</h2><div class="chips">${ts.map(t => `<div class="chip ${OPT.tables.has(t) ? 'on' : ''}" onclick="A.optT(${t})">${t}</div>`).join('')}</div>
+    <h2>How many questions?</h2><div class="chips">${CFG.OPT_LENS.map(n => `<div class="chip ${OPT.n === n ? 'on' : ''}" onclick="A.optN(${n})">${n}</div>`).join('')}</div>
+    <button class="btn" onclick="A.optGo()">Start</button>`);
+}
+A.optT = function(t){ OPT.tables.has(t) ? OPT.tables.delete(t) : OPT.tables.add(t); optcfg(); };
+A.optN = function(n){ OPT.n = n; optcfg(); };
+A.optGo = function(){ if (!OPT.tables.size) return; startOptTest(Array.from(OPT.tables).sort((a, b) => a - b), OPT.n); };
+
+/* ============ LEARN ============ */
+function partLines(p){ return p === 'p1' ? [1,2,3,4,5,6] : p === 'p2' ? [7,8,9,10] : [1,2,3,4,5,6,7,8,9,10]; }
+const STEP_LABEL = {copy1: 'Copy 1 of 2', copy2: 'Copy 2 of 2', fadeA: 'Fade 1 of 3', fadeB: 'Fade 2 of 3', fadeC: 'Fade 3 of 3',
+  r1: 'Recall 1 of 3', r2: 'Recall 2 of 3', r3: 'Recall 3 of 3 (mixed order)', w1: 'Whole table 1 of 3', w2: 'Whole table 2 of 3', w3: 'Whole table 3 of 3 (mixed order)'};
+const STEP_INTRO = {
+  copy: 'The table is shown. Type each answer while you look at it.',
+  fade: 'Some answers are now hidden. Try to remember them. A mistake takes you one step back.',
+  r: 'Everything is hidden. Type from memory. You need 3 perfect rounds in a row.',
+  w: 'Now the whole table, 1 to 10, from memory. You need 3 perfect rounds in a row.'};
+function startLearn(table, part, relearn){
+  S.flow = {kind: 'learn', table, part, step: part === 'whole' ? 'w1' : 'read', relearn: !!relearn};
+  save(); runLearn();
+}
+function runLearn(){
+  const f = S.flow;
+  if (f.pausedOn === today()) return home();
+  if (f.step === 'read') return readScreen();
+  stepIntro();
+}
+function readScreen(){
+  const f = S.flow, lines = partLines(f.part);
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div>
+    <div class="head">Table ${f.table} · ${partLabel(f.part)}</div>
+    <div class="card"><div class="lines">${lines.map(m => `<div>${f.table} × ${m} = <b>${f.table * m}</b></div>`).join('')}</div></div>
+    <div class="muted">Read it carefully and say it to yourself. When you are ready, tap the button.</div>
+    <button class="btn" onclick="A.readDone()">I am ready</button>`);
+}
+A.readDone = function(){ S.flow.step = 'copy1'; save(); runLearn(); };
+function stepGroup(step){ return step.startsWith('copy') ? 'copy' : step.startsWith('fade') ? 'fade' : step[0] === 'r' ? 'r' : 'w'; }
+function stepIntro(){
+  const f = S.flow;
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div>
+    <div class="head">Table ${f.table} · ${partLabel(f.part)}</div>
+    <h1>${STEP_LABEL[f.step]}</h1><div class="card">${STEP_INTRO[stepGroup(f.step)]}</div>
+    <button class="btn" onclick="A.round()">Start</button>`);
+}
+A.round = function(){ runRound(); };
+function runRound(){
+  const f = S.flow, t = f.table, step = f.step, base = partLines(f.part);
+  const jumbled = step === 'r3' || step === 'w3';
+  const order = jumbled ? shuffle(base) : base.slice();
+  const hintFn = stepGroup(step) === 'copy' ? () => true : step === 'fadeA' ? i => i % 2 === 0 : step === 'fadeB' ? i => i % 3 === 0 : () => false;
+  const retry = stepGroup(step) === 'copy';
+  const sid = uid(); let i = 0;
+  function next(){
+    if (i >= order.length) return roundDone();
+    const m = order[i];
+    ask({head: `Table ${t} · ${partLabel(f.part)}`, sub: `${STEP_LABEL[step]} · ${i + 1}/${order.length}`,
+      qtext: `${t} × ${m}`, hint: hintFn(i) ? `Look: ${t} × ${m} = ${t * m}` : '', expected: t * m, timer: true, retryOnWrong: retry,
+      done: r => {
+        logAnswer('learn-' + step, t, m, false, r.given, r.ok, r.ms, sid);
+        if (S.qA.length >= 20) sync();
+        if (!r.ok && !retry) return roundFailed();
+        i++; next();
+      }});
+  }
+  next();
+}
+const NEXT_STEP = {copy1: 'copy2', copy2: 'fadeA', fadeA: 'fadeB', fadeB: 'fadeC', fadeC: 'r1', r1: 'r2', r2: 'r3', w1: 'w2', w2: 'w3'};
+const BACK_STEP = {fadeA: 'copy2', fadeB: 'fadeA', fadeC: 'fadeB', r1: 'fadeC', r2: 'fadeC', r3: 'fadeC', w1: 'w1', w2: 'w1', w3: 'w1'};
+function roundDone(){
+  const f = S.flow, nx = NEXT_STEP[f.step];
+  if (nx){ f.step = nx; save(); return stepIntro(); }
+  completeLearn();
+}
+function roundFailed(){
+  const f = S.flow, step = f.step, g = stepGroup(step);
+  const key = f.table + '|' + f.part + '|' + (g === 'r' || g === 'w' ? g : step);
+  const fl = fails(); fl[key] = (fl[key] || 0) + 1;
+  f.step = BACK_STEP[step];
+  if (fl[key] >= CFG.MAXFAIL){
+    f.pausedOn = today(); save();
+    return msgScreen('Let us rest for today', 'That was tricky. Come back tomorrow and carry on from here. Your progress is saved.', 'Go home', "A.go('home')");
+  }
+  save();
+  msgScreen('Not quite', 'Let us go back one step and try again.', 'Continue', 'A.resume()');
+}
+function completeLearn(){
+  const f = S.flow, t = f.table;
+  const L = S.learned[t] || (S.learned[t] = {p1: false, p2: false, whole: false});
+  countDay();
+  if (f.part === 'p1'){
+    L.p1 = true;
+    if (f.relearn){ startLearn(t, 'p2', true); return; }
+    S.flow = {kind: 'choice', table: t}; save(); return choiceScreen();
+  }
+  if (f.part === 'p2'){ L.p2 = true; startLearn(t, 'whole', f.relearn); return; }
+  L.whole = true;
+  if (t === S.current) S.current = t + 1;
+  S.flow = null; S.pendingTest = true; save(); sync();
+  msgScreen('Table ' + t + ' done!', 'Well done. Now take your test.', 'Start the test', 'A.startPending()');
+}
+function choiceScreen(){
+  const t = S.flow.table;
+  view(`<h1>Table ${t}: ×1 to ×6 done</h1><div class="card">Do you want to learn ×7 to ×10 now, or later?</div>
+    <button class="btn" onclick="A.choiceNow()">Learn ×7 to ×10 now</button>
+    <button class="btn alt" onclick="A.choiceLater()">Later (take the test first)</button>`);
+}
+A.choiceNow = function(){ startLearn(S.flow.table, 'p2', false); };
+A.choiceLater = function(){ S.flow = null; S.pendingTest = true; save(); sync(); startPendingTest(); };
+
+function relearnPick(){
+  const ts = Object.keys(S.learned).map(Number).filter(t => S.learned[t].p1).sort((a, b) => a - b);
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div><h1>Relearn a table</h1>
+    <div class="muted">Pick a table. You will go through it again, step by step.</div>
+    <div class="chips" style="margin-top:12px">${ts.map(t => `<div class="chip" onclick="A.relearn(${t})">${t}</div>`).join('')}</div>`);
+}
+
+/* ============ PROGRESS ============ */
+function progress(){
+  const rows = [];
+  for (let t = 2; t <= 20; t++){
+    let a = 0, c = 0, ms = 0;
+    for (let m = 2; m <= 9; m++){ const f = S.facts[fk(t, m)]; if (f && f.a){ a += f.a; c += f.c; ms += f.avg * f.a; } }
+    const L = S.learned[t];
+    const status = L && L.whole ? 'Learned' : L && L.p1 ? 'Learning' : t === S.current ? 'Next' : '–';
+    rows.push({t, a, acc: a ? c / a : null, avg: a ? ms / a : null, status});
+  }
+  const facts = Object.keys(S.facts).map(k => { const [t, m] = k.split('|').map(Number); return Object.assign({t, m}, S.facts[k]); }).filter(f => f.a >= 1);
+  const weak = facts.slice().sort((a, b) => b.w - a.w).slice(0, 6).filter(f => f.w >= 0.45);
+  const slow = facts.filter(f => f.a >= 2).sort((a, b) => b.avg - a.avg).slice(0, 5);
+  const fast = facts.filter(f => f.a >= 2 && f.w < 0.4).sort((a, b) => a.avg - b.avg).slice(0, 5);
+  const strongT = rows.filter(r => r.a >= 10 && r.acc >= 0.9).map(r => r.t);
+  const weakT = rows.filter(r => r.a >= 10 && r.acc < 0.8).map(r => r.t);
+  const fl = f => `${f.t} × ${f.m}`;
+  const days = []; const d = new Date(); d.setDate(d.getDate() - 13);
+  for (let i = 0; i < 14; i++){ const s = fmtDate(d); days.push({s, v: S.days[s]}); d.setDate(d.getDate() + 1); }
+  const tests = S.sessions.slice(-8).reverse();
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div><h1>My progress</h1>
+    <div class="card"><b>Strengths</b><br>${strongT.length ? 'Tables going well: ' + strongT.join(', ') : 'Keep practising to build your strengths.'}
+    <br>${fast.length ? 'Fastest: ' + fast.map(fl).join(', ') : ''}</div>
+    <div class="card"><b>Needs work</b><br>${weakT.length ? 'Tables to improve: ' + weakT.join(', ') + '<br>' : ''}
+    ${weak.length ? 'Tricky facts: ' + weak.map(fl).join(', ') + '<br>' : ''}${slow.length ? 'Slowest: ' + slow.map(f => fl(f) + ' (' + fmtMs(f.avg) + ')').join(', ') : ''}
+    ${!weakT.length && !weak.length && !slow.length ? 'Nothing stands out yet.' : ''}</div>
+    <h2>Each table</h2><table class="tb"><tr><th>Table</th><th>Status</th><th>Right</th><th>Avg time</th></tr>
+    ${rows.map(r => `<tr><td>${r.t}</td><td>${r.status}</td><td>${r.acc === null ? '–' : pct(r.acc)}</td><td>${r.avg === null ? '–' : fmtMs(r.avg)}</td></tr>`).join('')}</table>
+    <h2>Last 14 days (% right)</h2>
+    <div class="bars">${days.map(x => `<div class="bar" style="height:${x.v && x.v.a ? Math.max(2, Math.round(x.v.c / x.v.a * 100)) : 0}%"></div>`).join('')}</div>
+    <div class="barl">${days.map(x => `<div>${x.s.slice(8)}</div>`).join('')}</div>
+    <h2>Recent tests</h2>${tests.length ? `<table class="tb"><tr><th>Date</th><th>Type</th><th>Marks</th><th>Time</th></tr>
+    ${tests.map(s => `<tr><td>${s.date.slice(5)}</td><td>${s.type === 'mixed' ? 'Test' : 'Optional'}</td><td>${s.c}/${s.n} (${Math.round(s.p)}%)</td><td>${fmtMs(s.ms)}</td></tr>`).join('')}</table>` : '<div class="muted">No tests yet.</div>'}`);
+}
+
+/* ============ SETTINGS & SYNC ============ */
+function sheetUrl(){ return S.sheetUrl || CFG.SHEET_URL; }
+function settings(){
+  view(`<div class="top"><button class="link" onclick="A.go('home')">← Home</button></div><h1>Settings</h1>
+    <label>Her name</label><input type="text" id="s_name" value="${esc(S.name)}">
+    <label>App name</label><input type="text" id="s_title" value="${esc(S.title)}">
+    <label>Google Sheet link (web app URL)</label><input type="text" id="s_url" value="${esc(sheetUrl())}">
+    <button class="btn" onclick="A.saveSettings()">Save</button>
+    <div class="muted">Not yet sent to the Sheet: ${S.qA.length} answers, ${S.qS.length} tests</div>
+    <button class="btn alt" onclick="A.syncNow()">Send to Sheet now</button>
+    <button class="btn alt" onclick="A.restore()">Restore progress from Sheet</button>
+    <div id="smsg" class="muted"></div>
+    <button class="btn grey" onclick="A.reset()">Start again from zero</button>`);
+}
+A.saveSettings = function(){
+  S.name = $('s_name').value.trim(); S.title = $('s_title').value.trim() || 'Tables'; S.sheetUrl = $('s_url').value.trim();
+  document.title = S.title; save(); home();
+};
+A.syncNow = async function(){ $('smsg').textContent = 'Sending...'; await sync(); $('smsg').textContent = S.qA.length ? 'Could not send. Check the link and internet.' : 'Sent.'; };
+A.reset = function(){ if (confirm('Delete all progress on this phone and start again?') && confirm('Really? This cannot be undone.')){ S = defState(); save(); home(); } };
+A.restore = async function(){
+  const u = sheetUrl(); if (!u) { $('smsg').textContent = 'Add the Sheet link first.'; return; }
+  try {
+    const r = await fetch(u + (u.includes('?') ? '&' : '?') + 'action=state');
+    const st = await r.json();
+    if (!st || !st.learned){ $('smsg').textContent = 'No saved progress found in the Sheet.'; return; }
+    if (confirm('Replace progress on this phone with the saved progress from the Sheet?')){
+      S = Object.assign(defState(), st, {qA: [], qS: [], flow: null, sheetUrl: u}); save(); home();
+    }
+  } catch (e){ $('smsg').textContent = 'Could not reach the Sheet.'; }
+};
+function exportState(){
+  const c = JSON.parse(JSON.stringify(S));
+  delete c.qA; delete c.qS; delete c.flow;
+  c.sessions = c.sessions.slice(-60);
+  const keys = Object.keys(c.days).sort().slice(-120); const nd = {}; keys.forEach(k => nd[k] = c.days[k]); c.days = nd;
+  return c;
+}
+let syncing = false;
+async function sync(){
+  const u = sheetUrl(); if (!u || syncing || (navigator.onLine === false)) return;
+  syncing = true;
+  try {
+    while (S.qA.length || S.qS.length){
+      const a = S.qA.slice(0, 200), s = S.qS.slice(0, 50);
+      await fetch(u, {method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify({answers: a, sessions: s, state: exportState()})});
+      S.qA.splice(0, a.length); S.qS.splice(0, s.length); save();
+    }
+    if (!S.qA.length && !S.qS.length) await fetch(u, {method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify({state: exportState()})});
+  } catch (e) {}
+  syncing = false;
+}
+window.addEventListener('online', sync);
+
+/* ============ START ============ */
+document.title = S.title;
+home();
+sync();
+</script>
+</body>
+</html>
